@@ -1,0 +1,52 @@
+{
+  "name": "n8n-nodes-mbs-backup",
+  "version": "1.0.0",
+  "description": "MBS Retrieve Backup node for n8n - download MBS PostgreSQL backup files via SFTP",
+  "license": "MIT",
+  "homepage": "https://github.com/manateeit/n8n-nodes-mbs-backup",
+  "author": {
+    "name": "Archtop",
+    "email": "info@archtop.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/manateeit/n8n-nodes-mbs-backup.git"
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "format": "prettier nodes credentials --write"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/SftpApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/MbsRetrieveBackup/MbsRetrieveBackup.node.js"
+    ]
+  },
+  "keywords": [
+    "n8n",
+    "n8n-community-node-package",
+    "mbs",
+    "sftp",
+    "backup",
+    "postgresql"
+  ],
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/ssh2-sftp-client": "^9.0.0",
+    "gulp": "^4.0.2",
+    "n8n-workflow": "*",
+    "prettier": "^2.7.1",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "ssh2-sftp-client": "^9.1.0"
+  }
+}
