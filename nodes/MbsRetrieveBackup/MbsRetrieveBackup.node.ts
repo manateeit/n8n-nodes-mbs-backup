@@ -158,14 +158,11 @@ export class MbsRetrieveBackup implements INodeType {
 
           const backupPath = `${basePath}${backupFolder.name}`;
 
-          // Recursively get all files from backup folder
-          const files = await getAllFiles(sftp, backupPath, filePattern);
-
-          // Apply max files limit if specified
-          const filesToDownload = maxFiles > 0 ? files.slice(0, maxFiles) : files;
+          // Recursively get all files from backup folder (stops early if maxFiles is set)
+          const files = await getAllFiles(sftp, backupPath, filePattern, maxFiles);
 
           // Download each file and create an item for it
-          for (const file of filesToDownload) {
+          for (const file of files) {
             const fileData = await sftp.get(file.path);
 
             returnData.push({
@@ -176,8 +173,8 @@ export class MbsRetrieveBackup implements INodeType {
                 backupFolder: backupFolder.name,
                 companyCode: companyCode,
                 modifyTime: file.modifyTime,
-                totalFilesFound: files.length,
-                filesDownloaded: filesToDownload.length,
+                filesDownloaded: files.length,
+                maxFilesLimit: maxFiles,
               },
               binary: {
                 [binaryPropertyName]: await this.helpers.prepareBinaryData(
@@ -217,21 +214,29 @@ export class MbsRetrieveBackup implements INodeType {
 
 /**
  * Recursively get all files from a directory
+ * Stops early if maxFiles limit is reached
  */
 async function getAllFiles(
   sftp: Client,
   dirPath: string,
   pattern: string,
+  maxFiles: number = 0,
 ): Promise<Array<{ name: string; path: string; size: number; modifyTime: number }>> {
   const files: Array<{ name: string; path: string; size: number; modifyTime: number }> = [];
   const items = await sftp.list(dirPath);
 
   for (const item of items) {
+    // Stop early if we've reached the max files limit
+    if (maxFiles > 0 && files.length >= maxFiles) {
+      break;
+    }
+
     const itemPath = `${dirPath}/${item.name}`;
 
     if (item.type === 'd') {
       // Recursively process subdirectories
-      const subFiles = await getAllFiles(sftp, itemPath, pattern);
+      const remaining = maxFiles > 0 ? maxFiles - files.length : 0;
+      const subFiles = await getAllFiles(sftp, itemPath, pattern, remaining > 0 ? remaining : maxFiles);
       files.push(...subFiles);
     } else if (item.type === '-') {
       // Regular file
@@ -243,6 +248,11 @@ async function getAllFiles(
           size: item.size,
           modifyTime: item.modifyTime,
         });
+
+        // Stop early if we've hit the limit after adding this file
+        if (maxFiles > 0 && files.length >= maxFiles) {
+          break;
+        }
       }
     }
   }
