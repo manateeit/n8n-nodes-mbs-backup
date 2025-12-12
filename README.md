@@ -37,27 +37,50 @@ docker restart <n8n-container-name>
 
 ## Quick Start
 
-### 1. Create SFTP Credentials
+### Option A: Using AWS Secrets Manager (Recommended)
 
-1. Go to **Credentials** → **New**
-2. Search for **"SFTP API"**
-3. Fill in your MBS SFTP details:
-   - **Host**: `transfer.cdg.ws`
-   - **Port**: `22`
-   - **Username**: Your SFTP username
-   - **Password**: Your SFTP password
+This is the most secure approach - retrieve credentials dynamically from AWS Secrets Manager.
 
-### 2. Add MBS Retrieve Backup Node
+**1. Store SFTP credentials in AWS Secrets Manager:**
+```bash
+aws secretsmanager create-secret \
+  --name mbs/sftp/credentials \
+  --secret-string '{
+    "host": "transfer.cdg.ws",
+    "port": 22,
+    "username": "your-username",
+    "password": "your-password"
+  }'
+```
 
-1. Create a new workflow
-2. Click **+** to add a node
-3. Search for **"MBS Retrieve Backup"**
-4. Configure:
-   - **Company Code**: `CO655` (your company code)
-   - **Base Path**: `/fromcdg/backup/`
-   - **File Pattern**: `*` (optional, download all files)
+**2. Create workflow:**
+```
+[AWS Secrets Manager Node]
+  Secret Name: mbs/sftp/credentials
+  Parse JSON: Yes
+  ↓
+[MBS Retrieve Backup Node]
+  Host: ={{$json.host}}
+  Port: ={{$json.port}}
+  Username: ={{$json.username}}
+  Password: ={{$json.password}}
+  Company Code: CO655
+  Base Path: /fromcdg/backup/
+```
 
-### 3. Download Backup Files
+### Option B: Hardcoded Credentials
+
+For testing or non-production use:
+
+**1. Add MBS Retrieve Backup Node**
+- Host: `transfer.cdg.ws`
+- Port: `22`
+- Username: `your-sftp-username`
+- Password: `your-sftp-password`
+- Company Code: `CO655`
+- Base Path: `/fromcdg/backup/`
+
+### 3. What Happens Next
 
 The node will:
 1. Connect to your SFTP server
@@ -105,6 +128,10 @@ The node will:
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
+| **Host** | String | Yes | `={{$json.host}}` | SFTP server hostname |
+| **Port** | Number | Yes | `22` | SFTP server port |
+| **Username** | String | Yes | `={{$json.username}}` | SFTP username (supports expressions) |
+| **Password** | String | Yes | `={{$json.password}}` | SFTP password (supports expressions) |
 | **Company Code** | String | Yes | - | Company identifier (e.g., CO655 for Archtop) |
 | **Base Path** | String | Yes | `/fromcdg/backup/` | Base directory on SFTP server |
 | **File Pattern** | String | No | `*` | File pattern to match (supports * wildcard) |
@@ -148,18 +175,25 @@ MBS creates backup folders with this naming pattern:
 
 **Important**: MBS only keeps ONE backup at a time. Old backups are deleted when new ones are created.
 
-## Credentials
+## Dynamic Credentials
 
-This node uses the **SFTP API** credential type:
+This node accepts SFTP credentials as parameters, making it perfect for dynamic credential flows:
 
-- **Host**: SFTP server hostname
-- **Port**: SFTP port (usually 22)
-- **Username**: SFTP username
-- **Password**: SFTP password
+**From AWS Secrets Manager:**
+```
+[AWS Secrets Manager] → [MBS Retrieve Backup]
+  - Host: ={{$json.host}}
+  - Username: ={{$json.username}}
+  - Password: ={{$json.password}}
+```
 
-Credentials can be:
-- Hardcoded in n8n credentials
-- Retrieved dynamically from AWS Secrets Manager (use with n8n-nodes-aws-secrets)
+**From any previous node:**
+The node accepts expressions for all credential fields, so you can retrieve credentials from:
+- AWS Secrets Manager
+- Environment variables
+- Configuration nodes
+- API responses
+- Any other n8n node output
 
 ## Common Use Cases
 
