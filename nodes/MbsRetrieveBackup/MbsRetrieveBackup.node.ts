@@ -22,13 +22,44 @@ export class MbsRetrieveBackup implements INodeType {
     },
     inputs: ['main'],
     outputs: ['main'],
-    credentials: [
-      {
-        name: 'sftpApi',
-        required: true,
-      },
-    ],
     properties: [
+      {
+        displayName: 'Host',
+        name: 'host',
+        type: 'string',
+        default: '={{$json.host}}',
+        required: true,
+        placeholder: 'transfer.cdg.ws',
+        description: 'SFTP server hostname (can use expression from previous node)',
+      },
+      {
+        displayName: 'Port',
+        name: 'port',
+        type: 'number',
+        default: 22,
+        required: true,
+        description: 'SFTP server port',
+      },
+      {
+        displayName: 'Username',
+        name: 'username',
+        type: 'string',
+        default: '={{$json.username}}',
+        required: true,
+        placeholder: 'sftp-user',
+        description: 'SFTP username (can use expression from previous node)',
+      },
+      {
+        displayName: 'Password',
+        name: 'password',
+        type: 'string',
+        typeOptions: {
+          password: true,
+        },
+        default: '={{$json.password}}',
+        required: true,
+        description: 'SFTP password (can use expression from previous node)',
+      },
       {
         displayName: 'Company Code',
         name: 'companyCode',
@@ -70,22 +101,24 @@ export class MbsRetrieveBackup implements INodeType {
 
     for (let i = 0; i < items.length; i++) {
       try {
+        const host = this.getNodeParameter('host', i) as string;
+        const port = this.getNodeParameter('port', i) as number;
+        const username = this.getNodeParameter('username', i) as string;
+        const password = this.getNodeParameter('password', i) as string;
         const companyCode = this.getNodeParameter('companyCode', i) as string;
         const basePath = this.getNodeParameter('basePath', i) as string;
         const filePattern = this.getNodeParameter('filePattern', i) as string;
         const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
 
-        const credentials = await this.getCredentials('sftpApi', i);
-
         const sftp = new Client();
 
         try {
-          // Connect to SFTP server
+          // Connect to SFTP server using dynamic credentials
           await sftp.connect({
-            host: credentials.host as string,
-            port: credentials.port as number,
-            username: credentials.username as string,
-            password: credentials.password as string,
+            host: host,
+            port: port,
+            username: username,
+            password: password,
           });
 
           // List directories in base path to find the backup folder

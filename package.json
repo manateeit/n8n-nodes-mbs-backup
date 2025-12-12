@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-mbs-backup",
-  "version": "1.0.0",
-  "description": "MBS Retrieve Backup node for n8n - download MBS PostgreSQL backup files via SFTP",
+  "version": "1.0.1",
+  "description": "MBS Retrieve Backup node for n8n - download MBS PostgreSQL backup files via SFTP with dynamic credentials",
   "license": "MIT",
   "homepage": "https://github.com/manateeit/n8n-nodes-mbs-backup",
   "author": {
@@ -23,9 +23,6 @@
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,
-    "credentials": [
-      "dist/credentials/SftpApi.credentials.js"
-    ],
     "nodes": [
       "dist/nodes/MbsRetrieveBackup/MbsRetrieveBackup.node.js"
     ]
