@@ -122,17 +122,27 @@ export class MbsRetrieveBackup implements INodeType {
           });
 
           // List directories in base path to find the backup folder
-          const directories = await sftp.list(basePath);
+          const allItems = await sftp.list(basePath);
+          const directories = allItems.filter(item => item.type === 'd');
 
-          // Find folder matching company code pattern (e.g., CO655-2024-01-15-12-30-45)
-          const backupFolder = directories.find((item) => {
-            return item.type === 'd' && item.name.startsWith(`${companyCode}-`);
-          });
+          let backupFolder;
+
+          // Strategy 1: If there's only one directory, use it (most common case)
+          if (directories.length === 1) {
+            backupFolder = directories[0];
+          }
+          // Strategy 2: Try to find folder matching company code pattern
+          else if (directories.length > 1) {
+            backupFolder = directories.find((item) => {
+              return item.name.startsWith(`${companyCode}-`);
+            });
+          }
 
           if (!backupFolder) {
+            const foundDirs = directories.map(d => d.name).join(', ');
             throw new NodeOperationError(
               this.getNode(),
-              `No backup folder found for company code: ${companyCode}`,
+              `No backup folder found. Looking for: "${companyCode}-*". Found ${directories.length} directories: [${foundDirs}]. Base path: ${basePath}`,
               { itemIndex: i }
             );
           }
