@@ -85,6 +85,14 @@ export class MbsRetrieveBackup implements INodeType {
         description: 'File pattern to match (default: * for all files)',
       },
       {
+        displayName: 'Max Files to Download',
+        name: 'maxFiles',
+        type: 'number',
+        default: 0,
+        description: 'Maximum number of files to download (0 = unlimited, useful for testing)',
+        placeholder: '0',
+      },
+      {
         displayName: 'Binary Property Name',
         name: 'binaryPropertyName',
         type: 'string',
@@ -108,6 +116,7 @@ export class MbsRetrieveBackup implements INodeType {
         const companyCode = this.getNodeParameter('companyCode', i) as string;
         const basePath = this.getNodeParameter('basePath', i) as string;
         const filePattern = this.getNodeParameter('filePattern', i) as string;
+        const maxFiles = this.getNodeParameter('maxFiles', i) as number;
         const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
 
         const sftp = new Client();
@@ -152,8 +161,11 @@ export class MbsRetrieveBackup implements INodeType {
           // Recursively get all files from backup folder
           const files = await getAllFiles(sftp, backupPath, filePattern);
 
+          // Apply max files limit if specified
+          const filesToDownload = maxFiles > 0 ? files.slice(0, maxFiles) : files;
+
           // Download each file and create an item for it
-          for (const file of files) {
+          for (const file of filesToDownload) {
             const fileData = await sftp.get(file.path);
 
             returnData.push({
@@ -164,6 +176,8 @@ export class MbsRetrieveBackup implements INodeType {
                 backupFolder: backupFolder.name,
                 companyCode: companyCode,
                 modifyTime: file.modifyTime,
+                totalFilesFound: files.length,
+                filesDownloaded: filesToDownload.length,
               },
               binary: {
                 [binaryPropertyName]: await this.helpers.prepareBinaryData(
