@@ -24,6 +24,25 @@ export class MbsRetrieveBackup implements INodeType {
     outputs: ['main'],
     properties: [
       {
+        displayName: 'Operation',
+        name: 'operation',
+        type: 'options',
+        noDataExpression: true,
+        options: [
+          {
+            name: 'Get File Count',
+            value: 'getFileCount',
+            description: 'Count files without downloading (fast)',
+          },
+          {
+            name: 'Download Files',
+            value: 'downloadFiles',
+            description: 'Download files with optional batching',
+          },
+        ],
+        default: 'downloadFiles',
+      },
+      {
         displayName: 'Host',
         name: 'host',
         type: 'string',
@@ -88,6 +107,11 @@ export class MbsRetrieveBackup implements INodeType {
         displayName: 'Batch Size (Limit)',
         name: 'limit',
         type: 'number',
+        displayOptions: {
+          show: {
+            operation: ['downloadFiles'],
+          },
+        },
         default: 0,
         description: 'Number of files to download in this batch (0 = all files)',
         placeholder: '0',
@@ -96,6 +120,11 @@ export class MbsRetrieveBackup implements INodeType {
         displayName: 'Offset (Skip Files)',
         name: 'offset',
         type: 'number',
+        displayOptions: {
+          show: {
+            operation: ['downloadFiles'],
+          },
+        },
         default: 0,
         description: 'Number of files to skip before downloading (for batching/pagination)',
         placeholder: '0',
@@ -117,6 +146,7 @@ export class MbsRetrieveBackup implements INodeType {
 
     for (let i = 0; i < items.length; i++) {
       try {
+        const operation = this.getNodeParameter('operation', i) as string;
         const host = this.getNodeParameter('host', i) as string;
         const port = this.getNodeParameter('port', i) as number;
         const username = this.getNodeParameter('username', i) as string;
@@ -124,9 +154,9 @@ export class MbsRetrieveBackup implements INodeType {
         const companyCode = this.getNodeParameter('companyCode', i) as string;
         const basePath = this.getNodeParameter('basePath', i) as string;
         const filePattern = this.getNodeParameter('filePattern', i) as string;
-        const limit = this.getNodeParameter('limit', i) as number;
-        const offset = this.getNodeParameter('offset', i) as number;
-        const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
+        const limit = operation === 'downloadFiles' ? this.getNodeParameter('limit', i) as number : 0;
+        const offset = operation === 'downloadFiles' ? this.getNodeParameter('offset', i) as number : 0;
+        const binaryPropertyName = operation === 'downloadFiles' ? this.getNodeParameter('binaryPropertyName', i) as string : 'data';
 
         const sftp = new Client();
 
@@ -167,46 +197,66 @@ export class MbsRetrieveBackup implements INodeType {
 
           const backupPath = `${basePath}${backupFolder.name}`;
 
-          // Get all files (or up to limit + offset to know if there are more)
-          const fetchLimit = limit > 0 ? offset + limit + 1 : 0; // +1 to detect if more files exist
-          const allFiles = await getAllFiles(sftp, backupPath, filePattern, fetchLimit);
-
-          // Apply offset and limit for batching
-          const startIndex = offset;
-          const endIndex = limit > 0 ? offset + limit : allFiles.length;
-          const files = allFiles.slice(startIndex, endIndex);
-
-          // Check if there are more files after this batch
-          const hasMore = limit > 0 && allFiles.length > endIndex;
-
-          // Download each file and create an item for it
-          for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
-            const file = files[fileIndex];
-            const fileData = await sftp.get(file.path);
+          if (operation === 'getFileCount') {
+            // Just count files without downloading
+            const allFiles = await getAllFiles(sftp, backupPath, filePattern, 0);
 
             returnData.push({
               json: {
-                fileName: file.name,
-                filePath: file.path,
-                fileSize: file.size,
+                operation: 'getFileCount',
                 backupFolder: backupFolder.name,
                 companyCode: companyCode,
-                modifyTime: file.modifyTime,
-                // Batch info
-                batchOffset: offset,
-                batchLimit: limit,
-                batchFileIndex: fileIndex,
-                batchFileCount: files.length,
-                hasMoreFiles: hasMore,
-                nextOffset: hasMore ? offset + limit : null,
-              },
-              binary: {
-                [binaryPropertyName]: await this.helpers.prepareBinaryData(
-                  fileData as Buffer,
-                  file.name,
-                ),
+                totalFiles: allFiles.length,
+                filePattern: filePattern,
+                basePath: basePath,
+                // Helper fields for batching
+                recommendedBatchSize: 50,
+                estimatedBatches: Math.ceil(allFiles.length / 50),
               },
             });
+          } else {
+            // Download files operation
+            // Get all files (or up to limit + offset to know if there are more)
+            const fetchLimit = limit > 0 ? offset + limit + 1 : 0; // +1 to detect if more files exist
+            const allFiles = await getAllFiles(sftp, backupPath, filePattern, fetchLimit);
+
+            // Apply offset and limit for batching
+            const startIndex = offset;
+            const endIndex = limit > 0 ? offset + limit : allFiles.length;
+            const files = allFiles.slice(startIndex, endIndex);
+
+            // Check if there are more files after this batch
+            const hasMore = limit > 0 && allFiles.length > endIndex;
+
+            // Download each file and create an item for it
+            for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+              const file = files[fileIndex];
+              const fileData = await sftp.get(file.path);
+
+              returnData.push({
+                json: {
+                  fileName: file.name,
+                  filePath: file.path,
+                  fileSize: file.size,
+                  backupFolder: backupFolder.name,
+                  companyCode: companyCode,
+                  modifyTime: file.modifyTime,
+                  // Batch info
+                  batchOffset: offset,
+                  batchLimit: limit,
+                  batchFileIndex: fileIndex,
+                  batchFileCount: files.length,
+                  hasMoreFiles: hasMore,
+                  nextOffset: hasMore ? offset + limit : null,
+                },
+                binary: {
+                  [binaryPropertyName]: await this.helpers.prepareBinaryData(
+                    fileData as Buffer,
+                    file.name,
+                  ),
+                },
+              });
+            }
           }
 
           await sftp.end();
