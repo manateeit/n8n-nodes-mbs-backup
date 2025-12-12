@@ -85,11 +85,19 @@ export class MbsRetrieveBackup implements INodeType {
         description: 'File pattern to match (default: * for all files)',
       },
       {
-        displayName: 'Max Files to Download',
-        name: 'maxFiles',
+        displayName: 'Batch Size (Limit)',
+        name: 'limit',
         type: 'number',
         default: 0,
-        description: 'Maximum number of files to download (0 = unlimited, useful for testing)',
+        description: 'Number of files to download in this batch (0 = all files)',
+        placeholder: '0',
+      },
+      {
+        displayName: 'Offset (Skip Files)',
+        name: 'offset',
+        type: 'number',
+        default: 0,
+        description: 'Number of files to skip before downloading (for batching/pagination)',
         placeholder: '0',
       },
       {
@@ -116,7 +124,8 @@ export class MbsRetrieveBackup implements INodeType {
         const companyCode = this.getNodeParameter('companyCode', i) as string;
         const basePath = this.getNodeParameter('basePath', i) as string;
         const filePattern = this.getNodeParameter('filePattern', i) as string;
-        const maxFiles = this.getNodeParameter('maxFiles', i) as number;
+        const limit = this.getNodeParameter('limit', i) as number;
+        const offset = this.getNodeParameter('offset', i) as number;
         const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
 
         const sftp = new Client();
@@ -158,11 +167,21 @@ export class MbsRetrieveBackup implements INodeType {
 
           const backupPath = `${basePath}${backupFolder.name}`;
 
-          // Recursively get all files from backup folder (stops early if maxFiles is set)
-          const files = await getAllFiles(sftp, backupPath, filePattern, maxFiles);
+          // Get all files (or up to limit + offset to know if there are more)
+          const fetchLimit = limit > 0 ? offset + limit + 1 : 0; // +1 to detect if more files exist
+          const allFiles = await getAllFiles(sftp, backupPath, filePattern, fetchLimit);
+
+          // Apply offset and limit for batching
+          const startIndex = offset;
+          const endIndex = limit > 0 ? offset + limit : allFiles.length;
+          const files = allFiles.slice(startIndex, endIndex);
+
+          // Check if there are more files after this batch
+          const hasMore = limit > 0 && allFiles.length > endIndex;
 
           // Download each file and create an item for it
-          for (const file of files) {
+          for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+            const file = files[fileIndex];
             const fileData = await sftp.get(file.path);
 
             returnData.push({
@@ -173,8 +192,13 @@ export class MbsRetrieveBackup implements INodeType {
                 backupFolder: backupFolder.name,
                 companyCode: companyCode,
                 modifyTime: file.modifyTime,
-                filesDownloaded: files.length,
-                maxFilesLimit: maxFiles,
+                // Batch info
+                batchOffset: offset,
+                batchLimit: limit,
+                batchFileIndex: fileIndex,
+                batchFileCount: files.length,
+                hasMoreFiles: hasMore,
+                nextOffset: hasMore ? offset + limit : null,
               },
               binary: {
                 [binaryPropertyName]: await this.helpers.prepareBinaryData(
